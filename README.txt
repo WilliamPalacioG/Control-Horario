@@ -37,11 +37,9 @@ Notas funcionales:
 - Si un turno termina después de medianoche, una hora de salida menor/igual a la entrada se interpreta como día siguiente.
 - El descanso dentro de la jornada se descuenta de las horas netas y se incluye en Excel/PDF.
 
-MEJORA V2
-=========
-- Calendario mensual interactivo.
-- Estados visuales: trabajado, descanso, jornada parcial y sin registrar.
-- Pulsar un día permite registrar o revisar sus registros.
-- Navegación por meses y botón Hoy.
-- Diseño responsive mejorado para móvil, tablet y escritorio.
-- El calendario mantiene desplazamiento horizontal controlado en pantallas muy pequeñas para conservar legibilidad.
+RESPONSIVE V3
+=============
+- Calendario sin scroll horizontal obligatorio en móvil.
+- Historial convertido en tarjetas en pantallas pequeñas.
+- Formularios, filtros y botones apilados correctamente.
+- Ajustes específicos para tablet, móvil y móviles pequeños.

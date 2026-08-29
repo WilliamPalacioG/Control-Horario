@@ -13,8 +13,6 @@ let db;
 let deferredInstallPrompt = null;
 let allRecords = [];
 let allStores = [];
-let calendarDate = new Date();
-let selectedCalendarDate = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -152,15 +150,6 @@ function bindEvents() {
   $("enableNotificationsBtn").addEventListener("click", enableNotifications);
   $("whatsappBtn").addEventListener("click", openWhatsApp);
   $("installBtn").addEventListener("click", installPWA);
-
-  $("prevMonthBtn").addEventListener("click", () => changeCalendarMonth(-1));
-  $("nextMonthBtn").addEventListener("click", () => changeCalendarMonth(1));
-  $("currentMonthBtn").addEventListener("click", () => {
-    calendarDate = new Date();
-    selectedCalendarDate = localDateISO(new Date());
-    renderCalendar();
-    renderCalendarDayDetail(selectedCalendarDate);
-  });
 }
 
 async function refreshData() {
@@ -383,7 +372,6 @@ function render() {
   renderTable(records);
   renderMetrics(records);
   renderStoreBreakdown(records);
-  renderCalendar();
 }
 
 function renderTable(records) {
@@ -397,15 +385,15 @@ function renderTable(records) {
     const breakText = r.breakMinutes ? `${formatHours(r.breakMinutes/60)} h` : "—";
     return `
       <tr>
-        <td>${formatDate(r.date)}</td>
-        <td>${dayName(r.date)}</td>
-        <td>${escapeHtml(r.store)}</td>
-        <td>${r.startTime || "—"}</td>
-        <td>${r.endTime || "—"}</td>
-        <td>${breakText}</td>
-        <td>${formatHours((r.workedMinutes || 0)/60)} h</td>
-        <td><span class="status-pill ${r.status === "rest" ? "status-rest" : "status-work"}">${r.status === "rest" ? "Descanso" : "Trabajado"}</span></td>
-        <td>
+        <td data-label="Fecha">${formatDate(r.date)}</td>
+        <td data-label="Día">${dayName(r.date)}</td>
+        <td data-label="Tienda">${escapeHtml(r.store)}</td>
+        <td data-label="Entrada">${r.startTime || "—"}</td>
+        <td data-label="Salida">${r.endTime || "—"}</td>
+        <td data-label="Descanso">${breakText}</td>
+        <td data-label="Horas">${formatHours((r.workedMinutes || 0)/60)} h</td>
+        <td data-label="Estado"><span class="status-pill ${r.status === "rest" ? "status-rest" : "status-work"}">${r.status === "rest" ? "Descanso" : "Trabajado"}</span></td>
+        <td data-label="Acciones">
           <div class="table-actions">
             <button class="btn btn-ghost" onclick="editRecord(${r.id})">Editar</button>
             <button class="btn btn-danger" onclick="deleteRecord(${r.id})">Eliminar</button>
@@ -598,143 +586,6 @@ window.removeStore = async function(id) {
   await requestToPromise(tx(STORES_STORE, "readwrite").delete(id));
   await refreshData();
   openManageStores();
-};
-
-
-function changeCalendarMonth(delta) {
-  calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + delta, 1);
-  selectedCalendarDate = null;
-  renderCalendar();
-  $("calendarDayDetail").classList.add("hidden");
-}
-
-function renderCalendar() {
-  const year = calendarDate.getFullYear();
-  const month = calendarDate.getMonth();
-
-  $("calendarMonthLabel").textContent = new Intl.DateTimeFormat("es-ES", {
-    month: "long",
-    year: "numeric"
-  }).format(new Date(year, month, 1));
-
-  const firstDay = new Date(year, month, 1);
-  const mondayIndex = (firstDay.getDay() + 6) % 7;
-  const gridStart = new Date(year, month, 1 - mondayIndex);
-
-  const todayISO = localDateISO(new Date());
-  const currentMonthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
-  const calendarGrid = $("calendarGrid");
-  const cells = [];
-
-  for (let i = 0; i < 42; i++) {
-    const date = new Date(gridStart);
-    date.setDate(gridStart.getDate() + i);
-
-    const iso = localDateISO(date);
-    const inCurrentMonth = date.getMonth() === month;
-    const dayRecords = allRecords.filter(r => r.date === iso);
-
-    const classes = ["calendar-day"];
-    if (!inCurrentMonth) classes.push("outside");
-    if (iso === todayISO) classes.push("today");
-    if (iso === selectedCalendarDate) classes.push("selected");
-
-    let entries = "";
-    if (dayRecords.length) {
-      entries = dayRecords.map((r) => {
-        if (r.status === "rest") {
-          return `<span class="calendar-entry rest">Descanso</span>`;
-        }
-
-        const cssClass = r.shiftType === "partial" ? "partial" : "worked";
-        const timeText = r.startTime && r.endTime ? `${r.startTime}-${r.endTime}` : "Trabajado";
-        return `<span class="calendar-entry ${cssClass}">${escapeHtml(r.store)} · ${timeText}</span>`;
-      }).join("");
-    } else if (inCurrentMonth && iso <= todayISO) {
-      entries = `<span class="calendar-entry missing">Sin registrar</span>`;
-    }
-
-    cells.push(`
-      <button type="button" class="${classes.join(" ")}" data-date="${iso}">
-        <span class="calendar-date-number">${date.getDate()}</span>
-        <span class="calendar-entry-list">${entries}</span>
-      </button>
-    `);
-  }
-
-  calendarGrid.innerHTML = cells.join("");
-
-  calendarGrid.querySelectorAll(".calendar-day").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectedCalendarDate = button.dataset.date;
-      const [y, m, d] = selectedCalendarDate.split("-").map(Number);
-      calendarDate = new Date(y, m - 1, 1);
-      renderCalendar();
-      renderCalendarDayDetail(selectedCalendarDate);
-    });
-  });
-}
-
-function renderCalendarDayDetail(dateISO) {
-  const detail = $("calendarDayDetail");
-  const records = allRecords
-    .filter(r => r.date === dateISO)
-    .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
-
-  const [y, m, d] = dateISO.split("-").map(Number);
-  const prettyDate = new Intl.DateTimeFormat("es-ES", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric"
-  }).format(new Date(y, m - 1, d));
-
-  let content = `<h3>${prettyDate.charAt(0).toUpperCase() + prettyDate.slice(1)}</h3>`;
-
-  if (!records.length) {
-    content += `
-      <p class="calendar-empty-day">No hay ningún registro para este día.</p>
-      <button class="btn btn-primary" type="button" onclick="registerFromCalendar('${dateISO}')">
-        Registrar este día
-      </button>
-    `;
-  } else {
-    content += `<div class="calendar-detail-records">`;
-    content += records.map((r) => {
-      const description = r.status === "rest"
-        ? "Descanso de día completo"
-        : `${r.startTime || "—"} a ${r.endTime || "—"} · ${formatHours((r.workedMinutes || 0)/60)} h${r.breakMinutes ? ` · Descanso ${formatHours(r.breakMinutes/60)} h` : ""}`;
-
-      return `
-        <div class="calendar-detail-record">
-          <div class="meta">
-            <strong>${escapeHtml(r.store)}</strong>
-            <span>${description}</span>
-          </div>
-          <div class="calendar-detail-actions">
-            <button class="btn btn-ghost" type="button" onclick="editRecord(${r.id})">Editar</button>
-            <button class="btn btn-danger" type="button" onclick="deleteRecord(${r.id})">Eliminar</button>
-          </div>
-        </div>
-      `;
-    }).join("");
-    content += `</div>
-      <div class="inline-actions">
-        <button class="btn btn-primary" type="button" onclick="registerFromCalendar('${dateISO}')">
-          Añadir otro registro
-        </button>
-      </div>`;
-  }
-
-  detail.innerHTML = content;
-  detail.classList.remove("hidden");
-}
-
-window.registerFromCalendar = function(dateISO) {
-  resetForm();
-  $("dateInput").value = dateISO;
-  window.scrollTo({ top: 0, behavior: "smooth" });
-  setTimeout(() => $("storeSelect").focus(), 350);
 };
 
 function buildSummary(records) {
