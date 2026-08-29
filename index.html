@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="description" content="Control Horario - Registro personal de jornadas, descansos y horas trabajadas." />
+  <title>Control Horario</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Exportación. Requiere conexión a Internet para cargar estas librerías. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">CH</div>
+      <div>
+        <h1>Control Horario</h1>
+        <p>Registro de jornadas y descansos</p>
+      </div>
+    </div>
+    <button id="installBtn" class="btn btn-secondary hidden" type="button">Instalar app</button>
+  </header>
+
+  <main class="app-shell">
+    <section class="dashboard-grid" aria-label="Resumen">
+      <article class="metric-card">
+        <span>Días trabajados</span>
+        <strong id="metricDaysWorked">0</strong>
+      </article>
+      <article class="metric-card">
+        <span>Horas trabajadas</span>
+        <strong id="metricHoursWorked">0 h</strong>
+      </article>
+      <article class="metric-card">
+        <span>Días de descanso</span>
+        <strong id="metricRestDays">0</strong>
+      </article>
+      <article class="metric-card">
+        <span>Descanso en jornada</span>
+        <strong id="metricBreakHours">0 h</strong>
+      </article>
+      <article class="metric-card">
+        <span>Promedio por día</span>
+        <strong id="metricAverage">0 h</strong>
+      </article>
+      <article class="metric-card">
+        <span>Fines de semana</span>
+        <strong id="metricWeekends">0 sáb · 0 dom</strong>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Registrar jornada</h2>
+          <p>La fecha se completa automáticamente y puede modificarse.</p>
+        </div>
+        <div class="today-badge" id="todayBadge"></div>
+      </div>
+
+      <form id="recordForm" autocomplete="off">
+        <input type="hidden" id="recordId" />
+
+        <div class="form-grid">
+          <label>
+            <span>Fecha</span>
+            <input id="dateInput" type="date" required />
+          </label>
+
+          <label>
+            <span>Tienda / estado</span>
+            <select id="storeSelect" required></select>
+          </label>
+        </div>
+
+        <div class="inline-actions">
+          <button id="addStoreBtn" class="btn btn-ghost" type="button">+ Añadir nueva tienda</button>
+          <button id="manageStoresBtn" class="btn btn-ghost" type="button">Gestionar tiendas</button>
+        </div>
+
+        <div id="workFields">
+          <fieldset>
+            <legend>Tipo de jornada</legend>
+            <label class="radio-chip">
+              <input type="radio" name="shiftType" value="single" checked />
+              <span>Jornada única</span>
+            </label>
+            <label class="radio-chip">
+              <input type="radio" name="shiftType" value="partial" />
+              <span>Jornada parcial / varios turnos</span>
+            </label>
+          </fieldset>
+
+          <div class="form-grid">
+            <label>
+              <span>Hora de entrada</span>
+              <select id="startTime"></select>
+            </label>
+            <label>
+              <span>Hora de salida</span>
+              <select id="endTime"></select>
+            </label>
+          </div>
+
+          <div class="inline-actions">
+            <button id="startNowBtn" class="btn btn-secondary" type="button">Iniciar jornada ahora</button>
+            <button id="endNowBtn" class="btn btn-secondary" type="button">Finalizar jornada ahora</button>
+          </div>
+
+          <fieldset>
+            <legend>Descanso dentro de la jornada</legend>
+            <label class="radio-chip">
+              <input type="radio" name="breakMode" value="none" checked />
+              <span>Sin descanso</span>
+            </label>
+            <label class="radio-chip">
+              <input type="radio" name="breakMode" value="withBreak" />
+              <span>Descontar descanso</span>
+            </label>
+          </fieldset>
+
+          <div id="breakFields" class="form-grid hidden">
+            <label>
+              <span>Inicio del descanso</span>
+              <select id="breakStart"></select>
+            </label>
+            <label>
+              <span>Fin del descanso</span>
+              <select id="breakEnd"></select>
+            </label>
+          </div>
+
+          <div class="calculation-box">
+            <div>
+              <span>Horas calculadas</span>
+              <strong id="calculatedHours">0 h</strong>
+            </div>
+            <small id="calculationDetail">Selecciona hora de entrada y salida.</small>
+          </div>
+        </div>
+
+        <label class="full-width">
+          <span>Observaciones</span>
+          <textarea id="notesInput" rows="3" maxlength="300" placeholder="Opcional"></textarea>
+        </label>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit" id="saveBtn">Guardar registro</button>
+          <button class="btn btn-secondary hidden" type="button" id="cancelEditBtn">Cancelar edición</button>
+        </div>
+      </form>
+    </section>
+
+
+<section class="panel calendar-panel">
+  <div class="panel-heading calendar-heading">
+    <div>
+      <h2>Calendario mensual</h2>
+      <p>Visualiza rápidamente los días trabajados, descansos y días sin registrar.</p>
+    </div>
+    <div class="calendar-controls">
+      <button id="prevMonthBtn" class="btn btn-ghost" type="button" aria-label="Mes anterior">←</button>
+      <strong id="calendarMonthLabel"></strong>
+      <button id="nextMonthBtn" class="btn btn-ghost" type="button" aria-label="Mes siguiente">→</button>
+      <button id="currentMonthBtn" class="btn btn-secondary" type="button">Hoy</button>
+    </div>
+  </div>
+
+  <div class="calendar-legend">
+    <span><i class="legend-dot worked"></i> Trabajado</span>
+    <span><i class="legend-dot rest"></i> Descanso</span>
+    <span><i class="legend-dot partial"></i> Jornada parcial</span>
+    <span><i class="legend-dot missing"></i> Sin registrar</span>
+  </div>
+
+  <div class="calendar-wrap">
+    <div class="calendar-weekdays">
+      <span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span>
+    </div>
+    <div id="calendarGrid" class="calendar-grid"></div>
+  </div>
+
+  <div id="calendarDayDetail" class="calendar-day-detail hidden"></div>
+</section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Historial y filtros</h2>
+          <p>Filtra por mes, año, tienda o rango de fechas.</p>
+        </div>
+      </div>
+
+      <div class="filters">
+        <label>
+          <span>Mes</span>
+          <select id="monthFilter">
+            <option value="">Todos</option>
+            <option value="1">Enero</option><option value="2">Febrero</option>
+            <option value="3">Marzo</option><option value="4">Abril</option>
+            <option value="5">Mayo</option><option value="6">Junio</option>
+            <option value="7">Julio</option><option value="8">Agosto</option>
+            <option value="9">Septiembre</option><option value="10">Octubre</option>
+            <option value="11">Noviembre</option><option value="12">Diciembre</option>
+          </select>
+        </label>
+        <label>
+          <span>Año</span>
+          <select id="yearFilter"><option value="">Todos</option></select>
+        </label>
+        <label>
+          <span>Tienda</span>
+          <select id="storeFilter"><option value="">Todas</option></select>
+        </label>
+        <label>
+          <span>Desde</span>
+          <input type="date" id="fromFilter" />
+        </label>
+        <label>
+          <span>Hasta</span>
+          <input type="date" id="toFilter" />
+        </label>
+      </div>
+
+      <div class="inline-actions">
+        <button id="clearFiltersBtn" class="btn btn-ghost" type="button">Limpiar filtros</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Día</th>
+              <th>Tienda</th>
+              <th>Entrada</th>
+              <th>Salida</th>
+              <th>Descanso</th>
+              <th>Horas</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="recordsTableBody"></tbody>
+        </table>
+      </div>
+
+      <div id="storeBreakdown" class="store-breakdown"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Exportación y copias de seguridad</h2>
+          <p>Los informes respetan los filtros activos.</p>
+        </div>
+      </div>
+
+      <div class="action-grid">
+        <button id="exportExcelBtn" class="btn btn-primary" type="button">Exportar Excel</button>
+        <button id="exportPdfBtn" class="btn btn-primary" type="button">Exportar PDF</button>
+        <button id="backupBtn" class="btn btn-secondary" type="button">Crear copia JSON</button>
+        <label class="btn btn-secondary file-label">
+          Importar copia
+          <input id="restoreInput" type="file" accept=".json,application/json" hidden />
+        </label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Recordatorio diario</h2>
+          <p>A las 23:00, si no existe ningún registro del día, la app puede mostrar una notificación.</p>
+        </div>
+      </div>
+
+      <div class="reminder-card">
+        <div>
+          <strong>Recordatorio: 23:00</strong>
+          <p id="notificationStatus">Notificaciones pendientes de configurar.</p>
+        </div>
+        <div class="inline-actions">
+          <button id="enableNotificationsBtn" class="btn btn-secondary" type="button">Activar notificaciones</button>
+          <button id="whatsappBtn" class="btn btn-whatsapp" type="button">Abrir WhatsApp</button>
+        </div>
+      </div>
+
+      <p class="note">
+        Importante: una PWA sin servidor no puede garantizar una notificación programada si el navegador y la app
+        están completamente cerrados. La app comprobará el registro mientras esté abierta y también al volver a abrirla.
+      </p>
+    </section>
+  </main>
+
+  <dialog id="storeDialog">
+    <form method="dialog" class="dialog-card" id="storeDialogForm">
+      <h3>Añadir tienda</h3>
+      <label>
+        <span>Nombre de la tienda</span>
+        <input id="newStoreName" type="text" maxlength="80" placeholder="Ej. Leganés Centro" />
+      </label>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" value="cancel">Cancelar</button>
+        <button id="confirmAddStoreBtn" class="btn btn-primary" value="default">Añadir</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="manageStoresDialog">
+    <div class="dialog-card">
+      <h3>Gestionar tiendas</h3>
+      <div id="storeManagementList" class="store-management-list"></div>
+      <div class="dialog-actions">
+        <button id="closeManageStoresBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
